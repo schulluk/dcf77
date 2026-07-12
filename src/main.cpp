@@ -20,12 +20,21 @@ constexpr uint32_t CARRIER_HZ = 77500;
 constexpr uint8_t LEDC_CHANNEL = 0;
 constexpr uint8_t LEDC_RES_BITS = 8;
 constexpr uint32_t DUTY_ON = 128;     // 50 % duty -> full carrier amplitude
-constexpr uint32_t DUTY_REDUCED = 13; // ~5 % duty -> ~15 % fundamental amplitude,
-                                      // matching the real transmitter's reduction
+constexpr uint32_t DUTY_REDUCED = 0;  // carrier fully off during dips — more robust
+                                      // than the spec's 15 % at close range, where the
+                                      // receiver AGC can flatten a partial dip
 
 // ---- Time ----
 // Europe/Berlin with automatic CET/CEST switching
 constexpr const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
+
+// Test mode: transmit a wrong time-of-day, starting at FAKE_HOUR:FAKE_MINUTE
+// and counting up normally from there (clocks verify that consecutive frames
+// increment by one minute, so a frozen time would never be accepted).
+// Date, weekday and DST flag stay real. Set to 0 for normal operation.
+#define FAKE_TIME 0
+constexpr int FAKE_HOUR = 3;
+constexpr int FAKE_MINUTE = 33;
 
 static bool frameBits[60];       // one bit per second of the current minute
 static time_t frameMinute = -1;  // start-of-minute epoch the frame was built for
@@ -48,6 +57,23 @@ static int putBits(int pos, uint8_t value, int len) {
 // DCF77 always announces the time of the *following* minute.
 static void buildFrame(time_t txMinuteStart) {
   time_t enc = txMinuteStart + 60;
+#if FAKE_TIME
+  // Shift real time by a fixed offset so the first transmitted frame reads
+  // FAKE_HOUR:FAKE_MINUTE and subsequent frames count up normally.
+  static time_t fakeOffset = 0;
+  static bool offsetSet = false;
+  if (!offsetSet) {
+    struct tm base;
+    localtime_r(&enc, &base);
+    base.tm_hour = FAKE_HOUR;
+    base.tm_min = FAKE_MINUTE;
+    base.tm_sec = 0;
+    base.tm_isdst = -1;
+    fakeOffset = mktime(&base) - enc;
+    offsetSet = true;
+  }
+  enc += fakeOffset;
+#endif
   struct tm t;
   localtime_r(&enc, &t);
 
