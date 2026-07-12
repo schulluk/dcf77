@@ -95,6 +95,11 @@ pio run -t upload
 pio device monitor
 ```
 
+`config.h` holds your WiFi credentials and is gitignored. It can also
+override the NTP servers (defaults: the PTB servers, run by the institute
+that operates the real DCF77, with pool.ntp.org as fallback); see the
+commented lines in `config.example.h`.
+
 The monitor shows WiFi/NTP progress and one line per minute with the frame
 being transmitted, e.g.:
 
@@ -115,10 +120,10 @@ Metal does, so keep sheet metal and foil away from the antenna.
 
 ## Test mode
 
-`FAKE_TIME` in [src/main.cpp](src/main.cpp) transmits a deliberately wrong
-time-of-day, starting at `FAKE_HOUR:FAKE_MINUTE` and counting up normally
-from there. When the clock jumps to 3:33, you *know* it's your signal and
-not Mainflingen. Set the flag back to 0 for production.
+`FAKE_TIME` (set it in `config.h`, see `config.example.h`) transmits a
+deliberately wrong time-of-day, starting at `FAKE_HOUR:FAKE_MINUTE` and
+counting up normally from there. When the clock jumps to 3:33, you *know*
+it's your signal and not Mainflingen. Remove the define for production.
 
 Why counting up matters: clocks validate reception by comparing consecutive
 frames, and the second one must read exactly minute + 1. A frozen fake time
@@ -228,10 +233,9 @@ more than the box.
 
 #### Can I turn off the LEDs?
 The blue LED (GPIO 2, mirrors the modulation dips) is firmware-controlled:
-`LED_BLINK` in [src/main.cpp](src/main.cpp), off by default. The green
-power LED is hardwired to the 3.3 V rail and can't be disabled in software;
-a strip of black tape or a dab of nail polish is the accepted engineering
-solution.
+`LED_BLINK` in `config.h`, off by default. The green power LED is hardwired
+to the 3.3 V rail and can't be disabled in software; a strip of black tape
+or a dab of nail polish is the accepted engineering solution.
 
 ## Legal note
 

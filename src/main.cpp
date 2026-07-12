@@ -13,9 +13,13 @@
 
 // ---- Hardware ----
 constexpr int PIN_ANTENNA = 4; // GPIO -> resistor -> ferrite tank -> GND
-constexpr int PIN_LED = 2;        // onboard blue LED
-constexpr bool LED_BLINK = false; // mirror the modulation dips on the LED
-                                  // (nice for debugging, annoying in a bedroom)
+constexpr int PIN_LED = 2; // onboard blue LED
+
+// Mirror the modulation dips on the LED (nice for debugging, annoying in a
+// bedroom). Overridable in config.h.
+#ifndef LED_BLINK
+#define LED_BLINK false
+#endif
 
 // ---- Carrier ----
 constexpr uint32_t CARRIER_HZ = 77500;
@@ -30,13 +34,31 @@ constexpr uint32_t DUTY_REDUCED = 0;  // carrier fully off during dips — more 
 // Europe/Berlin with automatic CET/CEST switching
 constexpr const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
 
+// NTP servers, overridable in config.h. Defaults are the PTB servers,
+// run by the same institute that operates the real DCF77 transmitter.
+#ifndef NTP_SERVER_1
+#define NTP_SERVER_1 "ptbtime1.ptb.de"
+#endif
+#ifndef NTP_SERVER_2
+#define NTP_SERVER_2 "ptbtime2.ptb.de"
+#endif
+#ifndef NTP_SERVER_3
+#define NTP_SERVER_3 "pool.ntp.org"
+#endif
+
 // Test mode: transmit a wrong time-of-day, starting at FAKE_HOUR:FAKE_MINUTE
 // and counting up normally from there (clocks verify that consecutive frames
 // increment by one minute, so a frozen time would never be accepted).
-// Date, weekday and DST flag stay real. Set to 0 for normal operation.
+// Date, weekday and DST flag stay real. Overridable in config.h.
+#ifndef FAKE_TIME
 #define FAKE_TIME 0
-constexpr int FAKE_HOUR = 3;
-constexpr int FAKE_MINUTE = 33;
+#endif
+#ifndef FAKE_HOUR
+#define FAKE_HOUR 3
+#endif
+#ifndef FAKE_MINUTE
+#define FAKE_MINUTE 33
+#endif
 
 static bool frameBits[60];       // one bit per second of the current minute
 static time_t frameMinute = -1;  // start-of-minute epoch the frame was built for
@@ -127,7 +149,7 @@ void setup() {
   Serial.printf("\nWiFi connected, IP %s\n", WiFi.localIP().toString().c_str());
 
   // PTB (the institute that runs DCF77) operates public NTP servers — fitting.
-  configTzTime(TZ_INFO, "ptbtime1.ptb.de", "ptbtime2.ptb.de", "pool.ntp.org");
+  configTzTime(TZ_INFO, NTP_SERVER_1, NTP_SERVER_2, NTP_SERVER_3);
   Serial.print("Waiting for NTP sync");
   struct tm t;
   while (!getLocalTime(&t, 1000) || t.tm_year < 120) Serial.print('.');
