@@ -13,7 +13,9 @@
 
 // ---- Hardware ----
 constexpr int PIN_ANTENNA = 4; // GPIO -> resistor -> ferrite tank -> GND
-constexpr int PIN_LED = 2;     // onboard LED, mirrors the modulation dips
+constexpr int PIN_LED = 2;        // onboard blue LED
+constexpr bool LED_BLINK = false; // mirror the modulation dips on the LED
+                                  // (nice for debugging, annoying in a bedroom)
 
 // ---- Carrier ----
 constexpr uint32_t CARRIER_HZ = 77500;
@@ -153,13 +155,13 @@ void loop() {
     } else {
       dipMs = frameBits[sec] ? 200 : 100;
       carrier(DUTY_REDUCED);
-      digitalWrite(PIN_LED, HIGH);
+      if (LED_BLINK) digitalWrite(PIN_LED, HIGH);
     }
   }
 
   if (dipMs && (uint32_t)(tv.tv_usec / 1000) >= dipMs) {
     carrier(DUTY_ON);
-    digitalWrite(PIN_LED, LOW);
+    if (LED_BLINK) digitalWrite(PIN_LED, LOW);
     dipMs = 0;
   }
 }
