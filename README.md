@@ -52,6 +52,10 @@ the PCB just past C1 and keep the left strip: both solder pads (coil wires
 already attached), C1, done. The receiver chip, crystal filter and the rest
 go in the bin.
 
+Cutting technique: a plain utility knife (box cutter) works fine. Score
+along the cut line and retrace the cut many times until you are through the
+board. Slow but controlled, with no flexing stress next to C1 and no dust.
+
 | Back: coil wires + C1 | Front: through-hole pads for the feed |
 |---|---|
 | ![Antenna board back](docs/images/antenna-board-back-c1.jpg) | ![Antenna board front](docs/images/antenna-board-front-pads.jpg) |
@@ -160,6 +164,14 @@ Only torn coil wires are fatal.
 Almost. First locate the tuning capacitor (C1); without it the coil is not
 resonant and nearly useless. Cut the board so that both antenna pads *and*
 C1 survive as one piece.
+
+#### What did you use to cut the PCB?
+A utility knife (box cutter). Score the cut line, then run the blade along
+it again and again until you are through, roughly a few dozen passes for
+1 mm FR4. This avoids the bending stress of snapping and the vibration of
+sawing, both of which can crack solder joints or C1 itself. Scoring both
+sides and breaking over a table edge also works if you keep the flex away
+from C1.
 
 #### Which side do I solder the feed wires to?
 The front side with the two gold through-hole pads, i.e. the side without
