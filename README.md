@@ -107,6 +107,33 @@ being transmitted, e.g.:
 Encoding next minute: 2026-07-11 14:12 CEST | bits: 000000000000000001001010010000010...
 ```
 
+## Status page & event log
+
+Once deployed, there's no need to plug the board into a laptop to see what
+it's doing. Open `http://dcf77.local/` (hostname set via `HOSTNAME` in
+`config.h`) for:
+
+- current time, uptime and the reason for the last reset (power-on, brownout,
+  crash, watchdog, ...)
+- WiFi signal, time of the last NTP sync, and the frame being transmitted
+- the event log, newest first
+
+The event log lives in flash and survives power loss. It records each boot
+with its reset reason, WiFi drops and reconnects, the first NTP sync, and
+restarts. A heartbeat timestamp is saved every 10 minutes, so after a power
+cut the next boot logs `previous run last alive at ...`, which tells you
+within 10 minutes when power went away. The raw files are at `/log.txt` and
+`/log.old.txt` (rotated at 32 KB).
+
+Flash writes briefly stall the CPU, which could stretch a 100 ms dip into an
+ambiguous one. While transmitting, log entries are therefore buffered and
+written during second 59, the one second per minute without a dip.
+
+If WiFi or NTP isn't available within 3 minutes of boot, the board logs it
+and restarts, rather than waiting forever with the carrier off. Once
+transmitting, a WiFi outage doesn't matter: the ESP32 keeps time on its own
+and resyncs when WiFi returns.
+
 ## Deployment
 
 Place the ferrite rod a few centimeters from the clock, **parallel** to the
@@ -236,6 +263,15 @@ The blue LED (GPIO 2, mirrors the modulation dips) is firmware-controlled:
 `LED_BLINK` in `config.h`, off by default. The green power LED is hardwired
 to the 3.3 V rail and can't be disabled in software; a strip of black tape
 or a dab of nail polish is the accepted engineering solution.
+
+#### Does the event log wear out the flash?
+No. The ESP32's NOR flash is rated for at least 100,000 erase cycles per
+4 KB sector. The heartbeat (every 10 minutes) erases a given NVS sector
+roughly every few days, good for centuries. The event log is only written on
+events, a few lines a day, and LittleFS spreads wear across the whole
+partition. Even a router outage lasting days, with the board restarting
+every 3 minutes, would take decades to wear it out. A single firmware upload
+erases more flash than a year of logging.
 
 ## Legal note
 

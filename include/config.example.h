@@ -9,6 +9,9 @@
 // #define NTP_SERVER_2 "ptbtime2.ptb.de"
 // #define NTP_SERVER_3 "pool.ntp.org"
 
+// Optional: network name, status page at http://dcf77.local/ (default: dcf77).
+// #define HOSTNAME "dcf77"
+
 // Optional: blink the onboard blue LED with the modulation dips (default: off).
 // #define LED_BLINK true
 
