@@ -91,6 +91,7 @@ ferrite rod for strain relief.
 
 ```sh
 cp include/config.example.h include/config.h   # then edit WiFi credentials
+openssl ecparam -name prime256v1 -genkey -noout -out ota_signing.pem   # see Updates over WiFi
 pio run -t upload
 pio device monitor
 ```
@@ -133,6 +134,56 @@ If WiFi or NTP isn't available within 3 minutes of boot, the board logs it
 and restarts, rather than waiting forever with the carrier off. Once
 transmitting, a WiFi outage doesn't matter: the ESP32 keeps time on its own
 and resyncs when WiFi returns.
+
+## Updates over WiFi
+
+Once the board runs this firmware (flashed over USB once), updates go over
+WiFi, so it can stay plugged in next to the clock:
+
+```sh
+pio run -e ota -t upload
+```
+
+Updates must be signed. Every build embeds the public half of your signing
+key, and the board only switches to a new image whose signature matches.
+Anyone else on the network can upload all they like; the board rejects it
+and keeps running the old firmware. USB flashing is unaffected.
+
+### Signing key
+
+Create it once, in the project root:
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout -out ota_signing.pem
+```
+
+To keep it elsewhere, point `OTA_SIGNING_KEY` at it instead. Every build,
+USB included, stops with instructions if the key is missing, so you can't
+end up with firmware that silently refuses all updates. The build prints the
+key's fingerprint, and the status page shows the one the running firmware
+accepts.
+
+Back the key up outside the repo, e.g. in your password manager. If it's
+lost, nothing breaks: create a new one and flash once over USB.
+
+Keys never go into git: `.gitignore` excludes `*.pem`, other key formats and
+anything with "key" in its name, and `.githooks/pre-commit` rejects any
+commit that adds a private key, whatever the file is called. Enable the hook
+once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+### What happens during an update
+
+The carrier goes silent while the image is written: flash writes would
+garble the dips, and no signal is better than a wrong time the clock might
+accept. The update and its outcome go into the event log; on success the
+board reboots into the new firmware.
+
+An old firmware signed with your key could be uploaded again (a downgrade),
+but only one you built yourself.
 
 ## Deployment
 

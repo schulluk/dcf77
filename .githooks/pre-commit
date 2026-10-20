@@ -1,0 +1,9 @@
+#!/bin/sh
+# Refuses commits that add a private key, whatever the file is called.
+# Enable once per clone: git config core.hooksPath .githooks
+if git diff --cached --no-color --diff-filter=ACMR -U0 | grep -qE '^\+.*PRIVATE[ ]KEY-----'; then
+  echo "pre-commit: refusing to commit a private key:" >&2
+  git diff --cached --name-only --diff-filter=ACMR -z |
+    xargs -0 grep -lE 'PRIVATE[ ]KEY-----' -- >&2
+  exit 1
+fi

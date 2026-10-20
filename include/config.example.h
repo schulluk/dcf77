@@ -10,6 +10,7 @@
 // #define NTP_SERVER_3 "pool.ntp.org"
 
 // Optional: network name, status page at http://dcf77.local/ (default: dcf77).
+// If you change it, change it in platformio.ini's [env:ota] as well.
 // #define HOSTNAME "dcf77"
 
 // Optional: blink the onboard blue LED with the modulation dips (default: off).
