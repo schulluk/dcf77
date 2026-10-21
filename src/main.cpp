@@ -88,6 +88,11 @@ constexpr const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
 constexpr unsigned long WIFI_TIMEOUT_S = 180;
 constexpr unsigned long NTP_TIMEOUT_S = 180;
 
+// Once running, retry WiFi this often while it's down. The Arduino core's
+// auto-reconnect gives up for good on some disconnect reasons, e.g. when the
+// access point actively kicks the board (reason 8, ASSOC_LEAVE).
+constexpr unsigned long WIFI_RETRY_S = 30;
+
 static bool frameBits[60];       // one bit per second of the current minute
 static time_t frameMinute = -1;  // start-of-minute epoch the frame was built for
 static char frameDesc[32] = "";  // time encoded in the current frame, for the status page
@@ -578,6 +583,12 @@ void loop() {
     if (sec == 59) {
       dipMs = 0; // minute marker: no dip, so flash writes can't disturb timing
       flushLog();
+      static uint32_t lastWiFiRetryMs = 0;
+      if (WiFi.status() != WL_CONNECTED && millis() - lastWiFiRetryMs >= WIFI_RETRY_S * 1000) {
+        WiFi.disconnect();
+        WiFi.begin(WIFI_SSID, WIFI_PASS);
+        lastWiFiRetryMs = millis();
+      }
       static time_t lastHeartbeat = 0;
       if (tv.tv_sec - lastHeartbeat >= (time_t)HEARTBEAT_S) {
         prefs.putUInt("alive", tv.tv_sec);

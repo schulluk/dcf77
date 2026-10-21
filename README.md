@@ -135,7 +135,8 @@ written during second 59, the one second per minute without a dip.
 If WiFi or NTP isn't available within 3 minutes of boot, the board logs it
 and restarts, rather than waiting forever with the carrier off. Once
 transmitting, a WiFi outage doesn't matter: the ESP32 keeps time on its own
-and resyncs when WiFi returns.
+and resyncs when WiFi returns. It retries the connection every 30 seconds
+by itself, since the Arduino core gives up when an access point kicks it.
 
 ## Updates over WiFi
 
