@@ -119,7 +119,7 @@ it's doing. Open `http://dcf77.local/` (hostname set via `HOSTNAME` in
 - current time, uptime and the reason for the last reset (power-on, brownout,
   crash, watchdog, ...)
 - WiFi signal, time of the last NTP sync, and the frame being transmitted
-- the event log, newest first
+- the newest 50 event log entries (the full log is linked below them)
 
 The event log lives in flash and survives power loss. It records each boot
 with its reset reason, WiFi drops and reconnects, the first NTP sync, and

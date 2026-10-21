@@ -121,6 +121,7 @@ constexpr const char *LOG_FILE_OLD = "/log.old.txt";
 constexpr size_t LOG_MAX_BYTES = 32 * 1024; // then rotate to LOG_FILE_OLD
 constexpr size_t LOG_QUEUE_MAX = 32;
 constexpr unsigned long HEARTBEAT_S = 600;
+constexpr int STATUS_LOG_LINES = 50; // newest entries on the status page, the rest via /log.txt
 
 static SemaphoreHandle_t queueMutex; // guards logQueue, held only briefly
 static SemaphoreHandle_t fileMutex;  // guards the log files
@@ -286,13 +287,19 @@ static void handleStatus() {
   s += "</pre><h2>Event log, newest first</h2><pre>";
 
   String log = readLogFile(LOG_FILE);
+  int total = 0;
+  for (char c : log) total += c == '\n';
   int end = log.length();
-  while (end > 0) {
+  for (int shown = 0; end > 0 && shown < STATUS_LOG_LINES; shown++) {
     int start = log.lastIndexOf('\n', end - 2) + 1; // skip the line's own '\n'
     appendEscaped(s, log.substring(start, end));
     end = start;
   }
-  s += "</pre><p><a href=/log.txt>log.txt</a> &middot; <a href=/log.old.txt>log.old.txt</a>";
+  s += "</pre><p>";
+  if (total > STATUS_LOG_LINES) {
+    s += "Last " + String(STATUS_LOG_LINES) + " of " + String(total) + " entries. ";
+  }
+  s += "Full log: <a href=/log.txt>log.txt</a>, older entries: <a href=/log.old.txt>log.old.txt</a>";
   server.send(200, "text/html", s);
 }
 
