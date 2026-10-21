@@ -123,17 +123,6 @@ static volatile uint32_t ntpSyncs = 0;
 
 static bool timeValid() { return time(nullptr) > 1600000000; } // after 2020
 
-// No updates from :58 to :05 at all, so the carrier stays on around the full
-// hour, when radio clocks typically try to sync.
-static bool inNoUpdateWindow(int *reopensAtHour = nullptr) {
-  if (!timeValid()) return false;
-  time_t now = time(nullptr);
-  struct tm t;
-  localtime_r(&now, &t);
-  if (reopensAtHour) *reopensAtHour = t.tm_min >= 58 ? (t.tm_hour + 1) % 24 : t.tm_hour;
-  return t.tm_min >= 58 || t.tm_min < 5;
-}
-
 static String fmtTime(time_t epoch) {
   struct tm t;
   localtime_r(&epoch, &t);
@@ -299,10 +288,9 @@ board picks the strongest when connecting and stays with it until the connection
 <dt>Firmware<dd>Git commit of the running build, "-dirty" if built with uncommitted changes.
 <dt>Updates<dd>Only firmware signed with the key with this fingerprint is accepted
 (<code>pio run -e ota -t upload</code>).
-<dt>Update lock<dd>No updates from :58 to :05 of every hour, so the carrier stays on around the
-full hour, when radio clocks typically try to sync. And after a rejected upload (bad signature,
-too large, ...), uploads are refused for a random 5 to 10 minutes, so nobody on the network can
-keep the carrier off with junk uploads. Your own next update has to wait too.
+<dt>Update lock<dd>After a rejected upload (bad signature, too large, connection dropped, ...),
+uploads are refused for a random 5 to 10 minutes, so nobody on the network can keep the carrier
+off with junk uploads. Your own next update has to wait too.
 <dt>Uptime<dd>Time since the last start.
 <dt>Last reset<dd>"power-on": power was cut, or EN button / USB reset. "software restart":
 after an update, or WiFi/NTP not available at boot. "watchdog" or "crash": a firmware bug, check
@@ -361,15 +349,11 @@ static void handleStatus() {
   s += "Firmware    " FW_VERSION ", built " FW_BUILT "\n";
   s += "Updates     signed only, key " OTA_KEY_FINGERPRINT "\n";
   unsigned long lockLeft = otaLockLeftS();
-  int reopensAt;
   if (lockLeft) {
     s += "Update lock " + String(lockLeft / 60) + " min " + String(lockLeft % 60) +
          " s left, after a rejected update";
     if (otaRefused) s += ", " + String(otaRefused) + " uploads refused since";
     s += "\n";
-  } else if (inNoUpdateWindow(&reopensAt)) {
-    snprintf(buf, sizeof(buf), "%02d:05", reopensAt);
-    s += "Update lock until " + String(buf) + " (no updates from :58 to :05)\n";
   } else {
     s += "Update lock none\n";
   }
@@ -485,14 +469,6 @@ static void handleUpdateBody() {
         // log or keep the lock up forever.
         otaRefused++;
         rejectNow(429, "locked for another " + String(left) + " s after a rejected update");
-        return;
-      }
-      int hour;
-      if (inNoUpdateWindow(&hour)) {
-        // Not an attack sign, so no lock and no log entry.
-        char until[8];
-        snprintf(until, sizeof(until), "%02d:05", hour);
-        rejectNow(503, String("no updates from :58 to :05, try again at ") + until);
         return;
       }
       // Checks that need no data, done before the carrier goes off.

@@ -196,10 +196,8 @@ board reboots into the new firmware.
 A bad upload (too large, no signature) is refused before the carrier goes
 off; one with a wrong signature can only be caught at the end. After any
 rejected upload, further uploads are refused for a random 5 to 10 minutes, so
-nobody on the network can keep the carrier off with junk uploads. Updates are
-also refused from :58 to :05 of every hour, so the carrier stays on around
-the full hour, when radio clocks typically try to sync. The status page shows
-when either lock is active.
+nobody on the network can keep the carrier off with junk uploads. The status page
+shows when the lock is active.
 
 An old firmware signed with your key could be uploaded again (a downgrade),
 but only one you built yourself.
