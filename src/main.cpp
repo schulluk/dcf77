@@ -12,6 +12,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
+#include <esp_ota_ops.h>
 #include <esp_system.h>
 #include <mbedtls/base64.h>
 #include <mbedtls/pk.h>
@@ -100,10 +101,38 @@ static char frameBitStr[60] = "";
 
 static volatile bool transmitting = false;
 static volatile bool otaActive = false; // carrier stays off during an OTA update
+
+// After a rejected upload, uploads are refused for a random 5 to 10 minutes,
+// so junk uploads can't keep the carrier off. Random, so nobody can time
+// attempts to the minute.
+static uint32_t otaLockUntilMs = 0;
+static bool otaLockSet = false;
+static uint32_t otaRefused = 0; // uploads refused during the current lock
+
+static unsigned long otaLockLeftS() {
+  if (!otaLockSet) return 0;
+  int32_t left = (int32_t)(otaLockUntilMs - millis());
+  if (left <= 0) {
+    otaLockSet = false;
+    return 0;
+  }
+  return (left + 999) / 1000;
+}
 static volatile time_t lastNtpSync = 0;
 static volatile uint32_t ntpSyncs = 0;
 
 static bool timeValid() { return time(nullptr) > 1600000000; } // after 2020
+
+// No updates from :58 to :05 at all, so the carrier stays on around the full
+// hour, when radio clocks typically try to sync.
+static bool inNoUpdateWindow(int *reopensAtHour = nullptr) {
+  if (!timeValid()) return false;
+  time_t now = time(nullptr);
+  struct tm t;
+  localtime_r(&now, &t);
+  if (reopensAtHour) *reopensAtHour = t.tm_min >= 58 ? (t.tm_hour + 1) % 24 : t.tm_hour;
+  return t.tm_min >= 58 || t.tm_min < 5;
+}
 
 static String fmtTime(time_t epoch) {
   struct tm t;
@@ -270,6 +299,10 @@ board picks the strongest when connecting and stays with it until the connection
 <dt>Firmware<dd>Git commit of the running build, "-dirty" if built with uncommitted changes.
 <dt>Updates<dd>Only firmware signed with the key with this fingerprint is accepted
 (<code>pio run -e ota -t upload</code>).
+<dt>Update lock<dd>No updates from :58 to :05 of every hour, so the carrier stays on around the
+full hour, when radio clocks typically try to sync. And after a rejected upload (bad signature,
+too large, ...), uploads are refused for a random 5 to 10 minutes, so nobody on the network can
+keep the carrier off with junk uploads. Your own next update has to wait too.
 <dt>Uptime<dd>Time since the last start.
 <dt>Last reset<dd>"power-on": power was cut, or EN button / USB reset. "software restart":
 after an update, or WiFi/NTP not available at boot. "watchdog" or "crash": a firmware bug, check
@@ -327,6 +360,19 @@ static void handleStatus() {
   }
   s += "Firmware    " FW_VERSION ", built " FW_BUILT "\n";
   s += "Updates     signed only, key " OTA_KEY_FINGERPRINT "\n";
+  unsigned long lockLeft = otaLockLeftS();
+  int reopensAt;
+  if (lockLeft) {
+    s += "Update lock " + String(lockLeft / 60) + " min " + String(lockLeft % 60) +
+         " s left, after a rejected update";
+    if (otaRefused) s += ", " + String(otaRefused) + " uploads refused since";
+    s += "\n";
+  } else if (inNoUpdateWindow(&reopensAt)) {
+    snprintf(buf, sizeof(buf), "%02d:05", reopensAt);
+    s += "Update lock until " + String(buf) + " (no updates from :58 to :05)\n";
+  } else {
+    s += "Update lock none\n";
+  }
   snprintf(buf, sizeof(buf), "%lud %02lu:%02lu:%02lu", up / 86400, up / 3600 % 24, up / 60 % 60,
            up % 60);
   s += "Uptime      " + String(buf) + "\n";
@@ -383,7 +429,8 @@ static void webTask(void *) {
 static mbedtls_sha256_context otaHash;
 static uint8_t otaSig[MBEDTLS_PK_SIGNATURE_MAX_SIZE];
 static size_t otaSigLen = 0;
-static String otaError; // first error of the current upload, empty = fine
+static String otaError;          // first error of the current upload, empty = fine
+static bool otaResponded = false; // already answered and closed, ignore the rest
 
 static void otaFail(const String &why) {
   if (otaError.isEmpty()) otaError = why;
@@ -401,43 +448,93 @@ static bool otaSignatureValid() {
 }
 
 static void endOtaWithError() {
-  logEvent("OTA update rejected: %s", otaError.c_str());
-  flushLog(true);
+  otaLockUntilMs = millis() + random(5 * 60, 10 * 60 + 1) * 1000UL;
+  otaLockSet = true;
+  otaRefused = 0;
+  logEvent("OTA update rejected: %s, uploads locked for %lu min", otaError.c_str(),
+           (otaLockLeftS() + 59) / 60);
+  if (otaActive) flushLog(true); // only while the carrier is off, see flushLog()
   otaActive = false;
+}
+
+// Answer right away and drop the connection, instead of reading a bad
+// upload's (possibly endless) body first.
+static void rejectNow(int code, const String &msg) {
+  server.send(code, "text/plain", msg + "\n");
+  server.client().stop();
+  otaResponded = true;
+}
+
+static void abortUpload() {
+  Update.abort();
+  mbedtls_sha256_free(&otaHash);
+  endOtaWithError();
+  rejectNow(400, "rejected: " + otaError);
 }
 
 static void handleUpdateBody() {
   HTTPRaw &raw = server.raw();
+  if (raw.status != RAW_START && otaResponded) return;
   switch (raw.status) {
     case RAW_START: {
-      // Flash writes would garble the dips. Better silence than a wrong
-      // time the clock might accept.
-      otaActive = true;
-      carrier(0);
       otaError = "";
-      logEvent("OTA update started from %s", server.client().remoteIP().toString().c_str());
-      flushLog(true); // carrier is off, safe to write now
+      otaResponded = false;
+      unsigned long left = otaLockLeftS();
+      if (left) {
+        // Not logged and not extended: a flood of attempts mustn't fill the
+        // log or keep the lock up forever.
+        otaRefused++;
+        rejectNow(429, "locked for another " + String(left) + " s after a rejected update");
+        return;
+      }
+      int hour;
+      if (inNoUpdateWindow(&hour)) {
+        // Not an attack sign, so no lock and no log entry.
+        char until[8];
+        snprintf(until, sizeof(until), "%02d:05", hour);
+        rejectNow(503, String("no updates from :58 to :05, try again at ") + until);
+        return;
+      }
+      // Checks that need no data, done before the carrier goes off.
+      const esp_partition_t *slot = esp_ota_get_next_update_partition(nullptr);
+      if (!slot || (size_t)server.clientContentLength() > slot->size) {
+        otaFail("larger than the update partition");
+      }
       String sig = server.header("X-Signature");
       if (mbedtls_base64_decode(otaSig, sizeof(otaSig), &otaSigLen, (const uint8_t *)sig.c_str(),
                                 sig.length()) != 0 ||
           otaSigLen == 0) {
         otaFail("missing or malformed X-Signature header");
       }
+      if (!otaError.isEmpty()) {
+        endOtaWithError();
+        rejectNow(400, "rejected: " + otaError);
+        return;
+      }
+      // Flash writes would garble the dips. Better silence than a wrong
+      // time the clock might accept.
+      otaActive = true;
+      carrier(0);
+      logEvent("OTA update started from %s", server.client().remoteIP().toString().c_str());
+      flushLog(true); // carrier is off, safe to write now
       mbedtls_sha256_init(&otaHash);
       mbedtls_sha256_starts_ret(&otaHash, 0);
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) otaFail(String("begin: ") + Update.errorString());
+      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+        otaFail(String("begin: ") + Update.errorString());
+        abortUpload();
+      }
       break;
     }
     case RAW_WRITE:
       vTaskDelay(1); // let the idle task feed the watchdog during long uploads
-      if (!otaError.isEmpty()) break; // keep draining the body, then report
       mbedtls_sha256_update_ret(&otaHash, raw.buf, raw.currentSize);
       if (Update.write(raw.buf, raw.currentSize) != raw.currentSize) {
         otaFail(String("write: ") + Update.errorString());
+        abortUpload();
       }
       break;
     case RAW_END:
-      if (otaError.isEmpty() && !otaSignatureValid()) otaFail("signature does not match");
+      if (!otaSignatureValid()) otaFail("signature does not match");
       if (otaError.isEmpty() && !Update.end(true)) otaFail(String("end: ") + Update.errorString());
       if (!otaError.isEmpty()) Update.abort();
       mbedtls_sha256_free(&otaHash);
@@ -452,6 +549,7 @@ static void handleUpdateBody() {
 }
 
 static void handleUpdateDone() {
+  if (otaResponded) return;
   if (!otaError.isEmpty()) {
     server.send(400, "text/plain", "rejected: " + otaError + "\n");
     endOtaWithError();
