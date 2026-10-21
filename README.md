@@ -114,11 +114,13 @@ Once deployed, there's no need to plug the board into a laptop to see what
 it's doing. Open `http://dcf77.local/` (hostname set via `HOSTNAME` in
 `config.h`) for:
 
+- current time, the last NTP sync and which NTP servers answer
+- whether the carrier is on, and the time and bits being transmitted
+- WiFi signal, access point and IP
 - firmware version (git commit, `-dirty` for uncommitted changes) and build
   time, to check which build is running, e.g. after a WiFi update
-- current time, uptime and the reason for the last reset (power-on, brownout,
-  crash, watchdog, ...)
-- WiFi signal, time of the last NTP sync, and the frame being transmitted
+- uptime and the reason for the last reset (power-on, brownout, crash,
+  watchdog, ...)
 - the newest 50 event log entries (the full log is linked below them)
 
 The event log lives in flash and survives power loss. It records each boot

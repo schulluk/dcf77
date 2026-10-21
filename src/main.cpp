@@ -265,18 +265,7 @@ static void handleStatus() {
        "<style>body{font:14px/1.4 ui-monospace,monospace;margin:16px}"
        "pre{white-space:pre-wrap;word-break:break-all}</style>"
        "<h1>DCF77 transmitter</h1><pre>";
-  s += "Firmware    " FW_VERSION ", built " FW_BUILT "\n";
   s += "Time        " + fmtTime(now) + "\n";
-  snprintf(buf, sizeof(buf), "%lud %02lu:%02lu:%02lu", up / 86400, up / 3600 % 24, up / 60 % 60,
-           up % 60);
-  s += "Uptime      " + String(buf) + "\n";
-  s += "Last reset  " + String(resetReason()) + "\n";
-  if (WiFi.status() == WL_CONNECTED) {
-    s += "WiFi        RSSI " + String(WiFi.RSSI()) + " dBm, AP " + WiFi.BSSIDstr() + " (channel " +
-         String(WiFi.channel()) + "), IP " + WiFi.localIP().toString() + "\n";
-  } else {
-    s += "WiFi        not connected\n";
-  }
   if (lastNtpSync) {
     s += "Last NTP    " + fmtTime(lastNtpSync) + " (" + String((now - lastNtpSync) / 60) +
          " min ago, " + String(ntpSyncs) + " syncs since boot)\n";
@@ -292,14 +281,27 @@ static void handleStatus() {
     const ip_addr_t *ip = esp_sntp_getserver(i);
     if (ip && !ip_addr_isany(ip)) s += String(" (") + ipaddr_ntoa(ip) + ")";
     uint8_t reach = sntp_getreachability(i);
-    s += reach & 1 ? ", answered last poll\n" : reach ? ", answered earlier, not last poll\n" : ", no reply so far\n";
+    s += reach & 1 ? ", answered last poll\n"
+         : reach   ? ", answered earlier, not last poll\n"
+                   : ", no reply so far\n";
   }
   s += "Carrier     " +
        String(otaActive ? "off (OTA update)" : transmitting ? "on" : "off (waiting for WiFi/NTP)") +
        "\n";
-  s += "Updates     signed only, key " OTA_KEY_FINGERPRINT "\n";
   s += "Encoding    " + String(frameDesc) + "\n";
   s += "Bits        " + String(frameBitStr) + "\n";
+  if (WiFi.status() == WL_CONNECTED) {
+    s += "WiFi        RSSI " + String(WiFi.RSSI()) + " dBm, AP " + WiFi.BSSIDstr() + " (channel " +
+         String(WiFi.channel()) + "), IP " + WiFi.localIP().toString() + "\n";
+  } else {
+    s += "WiFi        not connected\n";
+  }
+  s += "Firmware    " FW_VERSION ", built " FW_BUILT "\n";
+  s += "Updates     signed only, key " OTA_KEY_FINGERPRINT "\n";
+  snprintf(buf, sizeof(buf), "%lud %02lu:%02lu:%02lu", up / 86400, up / 3600 % 24, up / 60 % 60,
+           up % 60);
+  s += "Uptime      " + String(buf) + "\n";
+  s += "Last reset  " + String(resetReason()) + "\n";
   s += "Free heap   " + String(ESP.getFreeHeap()) + " bytes\n";
   s += "</pre><h2>Event log, newest first</h2><pre>";
 
