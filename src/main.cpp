@@ -523,6 +523,9 @@ void setup() {
   WiFi.onEvent(onWiFiEvent);
   WiFi.setHostname(HOSTNAME);
   WiFi.mode(WIFI_STA);
+  // Modem sleep drops multicast, so dcf77.local would only resolve now and
+  // then. Power comes from USB anyway.
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   waitOrRestart([] { return WiFi.status() == WL_CONNECTED; }, WIFI_TIMEOUT_S, "WiFi");

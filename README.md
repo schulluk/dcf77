@@ -146,6 +146,9 @@ WiFi, so it can stay plugged in next to the clock:
 pio run -e ota -t upload
 ```
 
+If `dcf77.local` doesn't resolve, pass the board's IP instead:
+`DCF77_HOST=192.168.1.x pio run -e ota -t upload`.
+
 Updates must be signed. Every build embeds the public half of your signing
 key, and the board only switches to a new image whose signature matches.
 Anyone else on the network can upload all they like; the board rejects it
