@@ -306,7 +306,10 @@ static void handleRawLog() {
 }
 
 // Runs on core 0 next to the WiFi stack, so serving a page never delays
-// the dip timing in loop() on core 1.
+// the dip timing in loop() on core 1. Idle priority: while a firmware
+// upload keeps it busy for a minute, the idle task on core 0 still gets
+// time slices to feed the task watchdog, which otherwise reboots the board
+// after 5 s.
 static void webTask(void *) {
   for (;;) {
     server.handleClient(); // blocks for the whole transfer during an update
@@ -356,6 +359,7 @@ static void handleUpdateBody() {
       carrier(0);
       otaError = "";
       logEvent("OTA update started from %s", server.client().remoteIP().toString().c_str());
+      flushLog(true); // carrier is off, safe to write now
       String sig = server.header("X-Signature");
       if (mbedtls_base64_decode(otaSig, sizeof(otaSig), &otaSigLen, (const uint8_t *)sig.c_str(),
                                 sig.length()) != 0 ||
@@ -368,6 +372,7 @@ static void handleUpdateBody() {
       break;
     }
     case RAW_WRITE:
+      vTaskDelay(1); // let the idle task feed the watchdog during long uploads
       if (!otaError.isEmpty()) break; // keep draining the body, then report
       mbedtls_sha256_update_ret(&otaHash, raw.buf, raw.currentSize);
       if (Update.write(raw.buf, raw.currentSize) != raw.currentSize) {
@@ -411,7 +416,7 @@ static void startWeb() {
   server.on(LOG_FILE, handleRawLog);
   server.on(LOG_FILE_OLD, handleRawLog);
   server.begin();
-  xTaskCreatePinnedToCore(webTask, "web", 8192, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(webTask, "web", 8192, nullptr, tskIDLE_PRIORITY, nullptr, 0);
 }
 
 // Wait until ready() holds, logging progress. On timeout, log why and restart.
