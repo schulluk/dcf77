@@ -253,6 +253,34 @@ static void appendEscaped(String &out, const String &in) {
   }
 }
 
+// Short explanation of each status value, collapsed below the values.
+static const char HELP_HTML[] = R"(<details><summary>What do these values mean?</summary><dl>
+<dt>Time<dd>The board's clock, from NTP, in CET/CEST.
+<dt>Last NTP<dd>When the time was last fetched. Resyncs every 3 hours. Much longer ago means
+no WiFi or internet: it keeps transmitting, drifting at most a second or two per day.
+<dt>NTP servers<dd>Tried in order, the next one only when the current one stops answering.
+"answered last poll" marks the one in use.
+<dt>Carrier<dd>"on": the clock gets a signal. "off": waiting for WiFi/NTP after boot, or a
+firmware update is running.
+<dt>Encoding<dd>The time being sent to the clock right now. DCF77 announces the next minute, so
+it's one minute ahead of Time. If the clock shows something else, the clock is at fault.
+<dt>Bits<dd>The 59 bits of this minute as transmitted. Only for debugging the encoding.
+<dt>WiFi<dd>RSSI: above -70 dBm is good, below -85 dBm unreliable. AP: the access point; the
+board picks the strongest when connecting and stays with it until the connection drops.
+<dt>Firmware<dd>Git commit of the running build, "-dirty" if built with uncommitted changes.
+<dt>Updates<dd>Only firmware signed with the key with this fingerprint is accepted
+(<code>pio run -e ota -t upload</code>).
+<dt>Uptime<dd>Time since the last start.
+<dt>Last reset<dd>"power-on": power was cut, or EN button / USB reset. "software restart":
+after an update, or WiFi/NTP not available at boot. "watchdog" or "crash": a firmware bug, check
+the log.
+<dt>Free heap<dd>Free RAM. Varies by a few KB with page loads; falling steadily over days would
+be a leak.
+<dt>Event log<dd>Survives power loss. "previous run last alive at": last heartbeat (every 10
+min) before this boot; if that's more than 10 minutes before the boot, the power was off.
+</dl></details>
+)";
+
 static void handleStatus() {
   time_t now = time(nullptr);
   unsigned long up = millis() / 1000;
@@ -263,7 +291,8 @@ static void handleStatus() {
        "<meta name=viewport content='width=device-width,initial-scale=1'>"
        "<title>DCF77 transmitter</title>"
        "<style>body{font:14px/1.4 ui-monospace,monospace;margin:16px}"
-       "pre{white-space:pre-wrap;word-break:break-all}</style>"
+       "pre{white-space:pre-wrap;word-break:break-all}"
+       "details{margin:1em 0}dt{font-weight:bold;margin-top:.5em}dd{margin-left:2ch}</style>"
        "<h1>DCF77 transmitter</h1><pre>";
   s += "Time        " + fmtTime(now) + "\n";
   if (lastNtpSync) {
@@ -303,7 +332,9 @@ static void handleStatus() {
   s += "Uptime      " + String(buf) + "\n";
   s += "Last reset  " + String(resetReason()) + "\n";
   s += "Free heap   " + String(ESP.getFreeHeap()) + " bytes\n";
-  s += "</pre><h2>Event log, newest first</h2><pre>";
+  s += "</pre>";
+  s += HELP_HTML;
+  s += "<h2>Event log, newest first</h2><pre>";
 
   String log = readLogFile(LOG_FILE);
   int total = 0;

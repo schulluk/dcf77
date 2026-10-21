@@ -123,6 +123,9 @@ it's doing. Open `http://dcf77.local/` (hostname set via `HOSTNAME` in
   watchdog, ...)
 - the newest 50 event log entries (the full log is linked below them)
 
+A collapsible "What do these values mean?" section below the values explains
+each of them, including what is normal and what isn't.
+
 The event log lives in flash and survives power loss. It records each boot
 with its reset reason, WiFi drops and reconnects, the first NTP sync, and
 restarts. A heartbeat timestamp is saved every 10 minutes, so after a power
