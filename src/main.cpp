@@ -220,11 +220,11 @@ static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
   static uint32_t downSinceMs = 0;
   if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
     if (downSinceMs) {
-      logEvent("WiFi back after %lus, IP %s, RSSI %d dBm", (millis() - downSinceMs) / 1000,
-               WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      logEvent("WiFi back after %lus, AP %s, IP %s, RSSI %d dBm", (millis() - downSinceMs) / 1000,
+               WiFi.BSSIDstr().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
     } else {
-      logEvent("WiFi connected, IP %s, RSSI %d dBm", WiFi.localIP().toString().c_str(),
-               WiFi.RSSI());
+      logEvent("WiFi connected, AP %s, IP %s, RSSI %d dBm", WiFi.BSSIDstr().c_str(),
+               WiFi.localIP().toString().c_str(), WiFi.RSSI());
     }
     up = true;
     downSinceMs = 0;
@@ -272,7 +272,8 @@ static void handleStatus() {
   s += "Uptime      " + String(buf) + "\n";
   s += "Last reset  " + String(resetReason()) + "\n";
   if (WiFi.status() == WL_CONNECTED) {
-    s += "WiFi        RSSI " + String(WiFi.RSSI()) + " dBm, IP " + WiFi.localIP().toString() + "\n";
+    s += "WiFi        RSSI " + String(WiFi.RSSI()) + " dBm, AP " + WiFi.BSSIDstr() + " (channel " +
+         String(WiFi.channel()) + "), IP " + WiFi.localIP().toString() + "\n";
   } else {
     s += "WiFi        not connected\n";
   }
@@ -543,6 +544,10 @@ void setup() {
   // Modem sleep drops multicast, so dcf77.local would only resolve now and
   // then. Power comes from USB anyway.
   WiFi.setSleep(false);
+  // Default is a fast scan that joins the first access point with a matching
+  // SSID, not the nearest. Scan all channels and take the strongest instead.
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   waitOrRestart([] { return WiFi.status() == WL_CONNECTED; }, WIFI_TIMEOUT_S, "WiFi");
