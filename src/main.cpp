@@ -283,6 +283,17 @@ static void handleStatus() {
   } else {
     s += "Last NTP    never\n";
   }
+  // Servers are tried in order; the next one only when the current one
+  // stops answering. Reachability is lwIP's record of the last 8 polls.
+  for (int i = 0; i < 3; i++) {
+    const char *name = esp_sntp_getservername(i);
+    if (!name) continue;
+    s += String(i == 0 ? "NTP servers " : "            ") + name;
+    const ip_addr_t *ip = esp_sntp_getserver(i);
+    if (ip && !ip_addr_isany(ip)) s += String(" (") + ipaddr_ntoa(ip) + ")";
+    uint8_t reach = sntp_getreachability(i);
+    s += reach & 1 ? ", answered last poll\n" : reach ? ", answered earlier, not last poll\n" : ", no reply so far\n";
+  }
   s += "Carrier     " +
        String(otaActive ? "off (OTA update)" : transmitting ? "on" : "off (waiting for WiFi/NTP)") +
        "\n";
