@@ -114,6 +114,8 @@ Once deployed, there's no need to plug the board into a laptop to see what
 it's doing. Open `http://dcf77.local/` (hostname set via `HOSTNAME` in
 `config.h`) for:
 
+- firmware version (git commit, `-dirty` for uncommitted changes) and build
+  time, to check which build is running, e.g. after a WiFi update
 - current time, uptime and the reason for the last reset (power-on, brownout,
   crash, watchdog, ...)
 - WiFi signal, time of the last NTP sync, and the frame being transmitted
