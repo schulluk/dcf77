@@ -11,6 +11,7 @@
 #include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <driver/ledc.h>
 #include <esp_sntp.h>
 #include <esp_ota_ops.h>
 #include <esp_system.h>
@@ -56,7 +57,8 @@ static void carrier(uint32_t duty) { ledcWrite(LEDC_CHANNEL, duty); }
 // ledcSetup()'s return value, which is truncated to whole Hz.
 static double readCarrierHz() {
   const auto &conf = LEDC.timer_group[0].timer[0].conf; // channel 0: high-speed group, timer 0
-  return 80e6 * 256 / conf.clock_divider / (1u << conf.duty_resolution); // 80 MHz APB clock
+  double clockHz = conf.tick_sel ? 80e6 : 1e6;          // APB or REF_TICK
+  return clockHz * 256 / conf.clock_divider / (1u << conf.duty_resolution);
 }
 
 // ---- Time ----
@@ -649,6 +651,15 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
 
   ledcSetup(LEDC_CHANNEL, CARRIER_HZ, LEDC_RES_BITS);
+  // Redo the timer on the 80 MHz APB clock: at 1 bit IDF picks the 1 MHz REF_TICK,
+  // whose coarser divider lands at 77482 Hz.
+  ledc_timer_config_t timer = {};
+  timer.speed_mode = LEDC_HIGH_SPEED_MODE; // channel 0
+  timer.timer_num = LEDC_TIMER_0;
+  timer.duty_resolution = (ledc_timer_bit_t)LEDC_RES_BITS;
+  timer.freq_hz = CARRIER_HZ;
+  timer.clk_cfg = LEDC_USE_APB_CLK;
+  ledc_timer_config(&timer);
   ledcAttachPin(PIN_ANTENNA, LEDC_CHANNEL);
   carrierHz = readCarrierHz();
   carrier(0); // stay silent until we have valid time
