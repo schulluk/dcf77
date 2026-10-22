@@ -17,6 +17,7 @@
 #include <mbedtls/base64.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/sha256.h>
+#include <soc/ledc_struct.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -39,13 +40,24 @@ constexpr int PIN_LED = 2; // onboard blue LED
 // ---- Carrier ----
 constexpr uint32_t CARRIER_HZ = 77500;
 constexpr uint8_t LEDC_CHANNEL = 0;
-constexpr uint8_t LEDC_RES_BITS = 8;
-constexpr uint32_t DUTY_ON = 128;     // 50 % duty -> full carrier amplitude
+// 1 bit, not 8: the LEDC divider has 1/256 steps, so at 8 bits the nearest
+// frequency is 77519 Hz, outside the clock's crystal filter (a few Hz wide).
+// At 1 bit it lands at 77500.0 Hz.
+constexpr uint8_t LEDC_RES_BITS = 1;
+constexpr uint32_t DUTY_ON = 1;       // 50 % duty -> full carrier amplitude
 constexpr uint32_t DUTY_REDUCED = 0;  // carrier fully off during dips — more robust
                                       // than the spec's 15 % at close range, where the
                                       // receiver AGC can flatten a partial dip
+static double carrierHz = 0;          // what LEDC actually generates
 
 static void carrier(uint32_t duty) { ledcWrite(LEDC_CHANNEL, duty); }
+
+// Read back from the timer's divider (18 bits, the low 8 fractional) instead of
+// ledcSetup()'s return value, which is truncated to whole Hz.
+static double readCarrierHz() {
+  const auto &conf = LEDC.timer_group[0].timer[0].conf; // channel 0: high-speed group, timer 0
+  return 80e6 * 256 / conf.clock_divider / (1u << conf.duty_resolution); // 80 MHz APB clock
+}
 
 // ---- Time ----
 // Europe/Berlin with automatic CET/CEST switching
@@ -279,7 +291,8 @@ no WiFi or internet: it keeps transmitting, drifting at most a second or two per
 <dt>NTP servers<dd>Tried in order, the next one only when the current one stops answering.
 "answered last poll" marks the one in use.
 <dt>Carrier<dd>"on": the clock gets a signal. "off": waiting for WiFi/NTP after boot, or a
-firmware update is running.
+firmware update is running. The frequency is what the board generates; it must be
+77500 Hz within about 1 Hz.
 <dt>Encoding<dd>The time being sent to the clock right now. DCF77 announces the next minute, so
 it's one minute ahead of Time. If the clock shows something else, the clock is at fault.
 <dt>Bits<dd>The 59 bits of this minute as transmitted. Only for debugging the encoding.
@@ -337,7 +350,7 @@ static void handleStatus() {
   }
   s += "Carrier     " +
        String(otaActive ? "off (OTA update)" : transmitting ? "on" : "off (waiting for WiFi/NTP)") +
-       "\n";
+       ", " + String(carrierHz, 2) + " Hz\n";
   s += "Encoding    " + String(frameDesc) + "\n";
   s += "Bits        " + String(frameBitStr) + "\n";
   if (WiFi.status() == WL_CONNECTED) {
@@ -637,6 +650,7 @@ void setup() {
 
   ledcSetup(LEDC_CHANNEL, CARRIER_HZ, LEDC_RES_BITS);
   ledcAttachPin(PIN_ANTENNA, LEDC_CHANNEL);
+  carrierHz = readCarrierHz();
   carrier(0); // stay silent until we have valid time
 
   setenv("TZ", TZ_INFO, 1); // for log timestamps before NTP is configured
@@ -646,7 +660,8 @@ void setup() {
   fsOk = LittleFS.begin(true); // formats on first boot
   prefs.begin("dcf77", false);
 
-  logEvent("boot, firmware %s, reset reason: %s", FW_VERSION, resetReason());
+  logEvent("boot, firmware %s, reset reason: %s, carrier %.2f Hz", FW_VERSION, resetReason(),
+           carrierHz);
   if (!fsOk) logEvent("LittleFS mount failed, event log is not persisted");
   uint32_t lastAlive = prefs.getUInt("alive", 0);
   if (lastAlive) {

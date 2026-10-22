@@ -14,6 +14,9 @@ ends up synced to the same source, just via a much shorter last mile.
 ## How it works
 
 - The ESP32 generates the 77.5 kHz carrier directly with LEDC PWM (50 % duty).
+  It uses 1 bit duty resolution: the LEDC clock divider only has 1/256 steps,
+  so with the usual 8 bits the closest frequency is 77519 Hz, which misses
+  the receiver's crystal filter (a few Hz wide). With 1 bit it is 77500.0 Hz.
 - DCF77 is amplitude modulation: at the start of each second the carrier is
   dipped for 100 ms (bit = 0) or 200 ms (bit = 1); second 59 has no dip
   (minute marker). 59 bits per minute encode the following minute's time and
