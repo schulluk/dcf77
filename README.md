@@ -119,7 +119,10 @@ it's doing. Open `http://dcf77.local/` (hostname set via `HOSTNAME` in
 `config.h`) for:
 
 - current time, the last NTP sync and which NTP servers answer
-- whether the carrier is on, and the time and bits being transmitted
+- whether the carrier is on, its exact frequency, and the time and bits
+  being transmitted
+- an antenna check done at boot (see below)
+- in test mode, a banner and the fake time a synced clock should show
 - WiFi signal, access point and IP
 - firmware version (git commit, `-dirty` for uncommitted changes) and build
   time, to check which build is running, e.g. after a WiFi update
@@ -140,6 +143,12 @@ within 10 minutes when power went away. The raw files are at `/log.txt` and
 Flash writes briefly stall the CPU, which could stretch a 100 ms dip into an
 ambiguous one. While transmitting, log entries are therefore buffered and
 written during second 59, the one second per minute without a dip.
+
+At boot, before the carrier starts, the board checks the DC path from GPIO 4
+through the resistor and the coil to GND: it switches the pin to input with
+the internal pull-up, which reads low only if the coil closes the path. A
+torn coil wire (they are hair-thin) shows up as `ANTENNA OPEN` on the status
+page and in the log. A shorted or detuned tank passes this check.
 
 If WiFi or NTP isn't available within 3 minutes of boot, the board logs it
 and restarts, rather than waiting forever with the carrier off. Once
@@ -222,7 +231,10 @@ Metal does, so keep sheet metal and foil away from the antenna.
 `FAKE_TIME` (set it in `config.h`, see `config.example.h`) transmits a
 deliberately wrong time-of-day, starting at `FAKE_HOUR:FAKE_MINUTE` and
 counting up normally from there. When the clock jumps to 3:33, you *know*
-it's your signal and not Mainflingen. Remove the define for production.
+it's your signal and not Mainflingen. The status page shows a test mode
+banner and the time a synced clock should show right now. The fake time
+restarts at `FAKE_HOUR:FAKE_MINUTE` on every boot, WiFi updates included.
+Remove the define for production.
 
 Why counting up matters: clocks validate reception by comparing consecutive
 frames, and the second one must read exactly minute + 1. A frozen fake time
