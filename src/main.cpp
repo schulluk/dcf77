@@ -111,6 +111,11 @@ constexpr unsigned long WIFI_RETRY_S = 30;
 static bool frameBits[60];       // one bit per second of the current minute
 static time_t frameMinute = -1;  // start-of-minute epoch the frame was built for
 static char frameDesc[32] = "";  // time encoded in the current frame, for the status page
+#if FAKE_TIME
+static time_t fakeOffset = 0; // fake minus real time, set with the first frame
+static bool fakeOffsetSet = false;
+#endif
+static bool antennaOk = false; // DC path GPIO -> resistor -> coil -> GND, checked at boot
 static char frameBitStr[60] = "";
 
 static volatile bool transmitting = false;
@@ -295,6 +300,12 @@ no WiFi or internet: it keeps transmitting, drifting at most a second or two per
 <dt>Carrier<dd>"on": the clock gets a signal. "off": waiting for WiFi/NTP after boot, or a
 firmware update is running. The frequency is what the board generates; it must be
 77500 Hz within about 1 Hz.
+<dt>Antenna<dd>Checked once at boot: with the carrier off, the pin pulls up weakly and must read
+low through the 510 Ω resistor and the coil to GND. "OPEN" means a broken wire, most likely one
+of the hair-thin coil wires. Can't detect a detuned or shorted tank.
+<dt>Test mode<dd>Only shown when built with FAKE_TIME in config.h: sends a wrong time-of-day
+that counts up from FAKE_HOUR:FAKE_MINUTE at boot, so a clock that shows it provably synced to
+this transmitter, not to the real DCF77.
 <dt>Encoding<dd>The time being sent to the clock right now. DCF77 announces the next minute, so
 it's one minute ahead of Time. If the clock shows something else, the clock is at fault.
 <dt>Bits<dd>The 59 bits of this minute as transmitted. Only for debugging the encoding.
@@ -329,7 +340,12 @@ static void handleStatus() {
        "<style>body{font:14px/1.4 ui-monospace,monospace;margin:16px}"
        "pre{white-space:pre-wrap;word-break:break-all}"
        "details{margin:1em 0}dt{font-weight:bold;margin-top:.5em}dd{margin-left:2ch}</style>"
-       "<h1>DCF77 transmitter</h1><pre>";
+       "<h1>DCF77 transmitter</h1>";
+#if FAKE_TIME
+  s += "<p><b>TEST MODE: transmitting a fake time, see \"Test mode\" below.</b></p>";
+#endif
+  if (!antennaOk) s += "<p><b>ANTENNA OPEN: see \"Antenna\" below.</b></p>";
+  s += "<pre>";
   s += "Time        " + fmtTime(now) + "\n";
   if (lastNtpSync) {
     s += "Last NTP    " + fmtTime(lastNtpSync) + " (" + String((now - lastNtpSync) / 60) +
@@ -353,6 +369,23 @@ static void handleStatus() {
   s += "Carrier     " +
        String(otaActive ? "off (OTA update)" : transmitting ? "on" : "off (waiting for WiFi/NTP)") +
        ", " + String(carrierHz, 2) + " Hz\n";
+  s += String("Antenna     ") +
+       (antennaOk ? "coil connected (DC check at boot)\n"
+                  : "OPEN, no DC path through resistor and coil (broken wire?)\n");
+#if FAKE_TIME
+  if (fakeOffsetSet) {
+    time_t fake = now + fakeOffset;
+    struct tm ft;
+    localtime_r(&fake, &ft);
+    long off = fakeOffset < 0 ? -fakeOffset : fakeOffset;
+    snprintf(buf, sizeof(buf), "%02d:%02d (real time %s %ld:%02ld)", ft.tm_hour, ft.tm_min,
+             fakeOffset < 0 ? "minus" : "plus", off / 3600, off / 60 % 60);
+    s += String("Test mode   on, a synced clock shows ") + buf + "\n";
+  } else {
+    s += "Test mode   on, starts at " + String(FAKE_HOUR) + ":" + String(FAKE_MINUTE) +
+         " with the first frame\n";
+  }
+#endif
   s += "Encoding    " + String(frameDesc) + "\n";
   s += "Bits        " + String(frameBitStr) + "\n";
   if (WiFi.status() == WL_CONNECTED) {
@@ -603,9 +636,7 @@ static void buildFrame(time_t txMinuteStart) {
 #if FAKE_TIME
   // Shift real time by a fixed offset so the first transmitted frame reads
   // FAKE_HOUR:FAKE_MINUTE and subsequent frames count up normally.
-  static time_t fakeOffset = 0;
-  static bool offsetSet = false;
-  if (!offsetSet) {
+  if (!fakeOffsetSet) {
     struct tm base;
     localtime_r(&enc, &base);
     base.tm_hour = FAKE_HOUR;
@@ -613,7 +644,7 @@ static void buildFrame(time_t txMinuteStart) {
     base.tm_sec = 0;
     base.tm_isdst = -1;
     fakeOffset = mktime(&base) - enc;
-    offsetSet = true;
+    fakeOffsetSet = true;
   }
   enc += fakeOffset;
 #endif
@@ -646,9 +677,21 @@ static void buildFrame(time_t txMinuteStart) {
   Serial.printf("Encoding next minute: %s | bits: %s\n", frameDesc, frameBitStr);
 }
 
+// With the carrier off, a weak pull-up on the antenna pin reads low only if the
+// coil closes the DC path to GND (about 40 mV through 45 kΩ vs 510 Ω + coil).
+// Open, the pull-up charges C1 and the pin reads high.
+static bool checkAntenna() {
+  pinMode(PIN_ANTENNA, INPUT_PULLUP);
+  delay(20);
+  bool ok = digitalRead(PIN_ANTENNA) == LOW;
+  pinMode(PIN_ANTENNA, INPUT);
+  return ok;
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_LED, OUTPUT);
+  antennaOk = checkAntenna();
 
   ledcSetup(LEDC_CHANNEL, CARRIER_HZ, LEDC_RES_BITS);
   // Redo the timer on the 80 MHz APB clock: at 1 bit IDF picks the 1 MHz REF_TICK,
@@ -674,6 +717,11 @@ void setup() {
   logEvent("boot, firmware %s, reset reason: %s, carrier %.2f Hz", FW_VERSION, resetReason(),
            carrierHz);
   if (!fsOk) logEvent("LittleFS mount failed, event log is not persisted");
+  logEvent(antennaOk ? "antenna DC check: coil connected"
+                     : "antenna DC check: OPEN, no DC path through resistor and coil");
+#if FAKE_TIME
+  logEvent("TEST MODE: transmitting a fake time from %02d:%02d", FAKE_HOUR, FAKE_MINUTE);
+#endif
   uint32_t lastAlive = prefs.getUInt("alive", 0);
   if (lastAlive) {
     logEvent("previous run last alive at %s (heartbeat every %lu min)",
