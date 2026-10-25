@@ -1,6 +1,5 @@
 .pio/
-# WiFi credentials, in every project folder
-**/include/config.h
+include/config.h
 tmp/
 # Keys never go into git, wherever they live and whatever they're called
 # (e.g. the OTA signing key). .githooks/pre-commit also rejects key contents

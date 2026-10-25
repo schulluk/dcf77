@@ -1,27 +1,17 @@
-# Embeds the firmware version (the last git commit that changed this project
-# folder, "-dirty" with uncommitted changes in it) and build time, shown on
-# the status page and logged at boot, so you can tell which build a board is
-# running, e.g. after a WiFi update. Only this folder counts: commits and edits
-# elsewhere in the repo (e.g. projector/) don't change the version.
+# Embeds the firmware version (git commit, "-dirty" with uncommitted
+# changes) and build time, shown on the status page and logged at boot, so
+# you can tell which build a board is running, e.g. after a WiFi update.
 import datetime
 import os
 import subprocess
 
 Import("env")  # noqa: F821, provided by PlatformIO
 
-
-
-def git(*args):
-    return subprocess.run(
-        ["git", *args],
+try:
+    version = subprocess.run(
+        ["git", "describe", "--always", "--dirty", "--tags"],
         cwd=env.subst("$PROJECT_DIR"), check=True, capture_output=True, text=True,
     ).stdout.strip()
-
-
-try:
-    version = git("log", "-1", "--format=%h", "--", ".") or "unknown"
-    if git("status", "--porcelain", "--untracked-files=no", "--", "."):
-        version += "-dirty"
 except (OSError, subprocess.CalledProcessError):
     version = "unknown"
 built = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
