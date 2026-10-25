@@ -94,6 +94,7 @@ ferrite rod for strain relief.
 ## Build & flash
 
 ```sh
+cd transmitter   # this folder, all commands below run here
 cp include/config.example.h include/config.h   # then edit WiFi credentials
 openssl ecparam -name prime256v1 -genkey -noout -out ota_signing.pem   # see Updates over WiFi
 pio run -t upload
@@ -124,8 +125,8 @@ it's doing. Open `http://dcf77.local/` (hostname set via `HOSTNAME` in
 - an antenna check done at boot (see below)
 - in test mode, a banner and the fake time a synced clock should show
 - WiFi signal, access point and IP
-- firmware version (git commit, `-dirty` for uncommitted changes) and build
-  time, to check which build is running, e.g. after a WiFi update
+- firmware version (last git commit that changed `transmitter/`, `-dirty`
+  for uncommitted changes there) and build time, to check which build is running, e.g. after a WiFi update
 - uptime and the reason for the last reset (power-on, brownout, crash,
   watchdog, ...)
 - the newest 50 event log entries (the full log is linked below them)
@@ -191,9 +192,9 @@ Back the key up outside the repo, e.g. in your password manager. If it's
 lost, nothing breaks: create a new one and flash once over USB.
 
 Keys never go into git: `.gitignore` excludes `*.pem`, other key formats and
-anything with "key" in its name, and `.githooks/pre-commit` rejects any
-commit that adds a private key, whatever the file is called. Enable the hook
-once per clone:
+anything with "key" in its name, and `.githooks/pre-commit` (both in the
+repo root) rejects any commit that adds a private key, whatever the file is
+called. Enable the hook once per clone:
 
 ```sh
 git config core.hooksPath .githooks

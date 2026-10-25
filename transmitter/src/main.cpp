@@ -311,7 +311,8 @@ it's one minute ahead of Time. If the clock shows something else, the clock is a
 <dt>Bits<dd>The 59 bits of this minute as transmitted. Only for debugging the encoding.
 <dt>WiFi<dd>RSSI: above -70 dBm is good, below -85 dBm unreliable. AP: the access point; the
 board picks the strongest when connecting and stays with it until the connection drops.
-<dt>Firmware<dd>Git commit of the running build, "-dirty" if built with uncommitted changes.
+<dt>Firmware<dd>Last git commit that changed transmitter/, "-dirty" if built with uncommitted
+changes there.
 <dt>Updates<dd>Only firmware signed with the key with this fingerprint is accepted
 (<code>pio run -e ota -t upload</code>).
 <dt>Update lock<dd>After a rejected upload (bad signature, too large, connection dropped, ...),
